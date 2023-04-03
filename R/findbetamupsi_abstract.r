@@ -1,16 +1,14 @@
-#' The findbetamupsi function
+#' The findbetamupsi (abstract) function
 #'
 #' A function to estimate (a) the parameters of a Beta distribution for the expected mean of a proportion - usually the prevalence of disease/infection for the units in an area/region and (b) the parameters of a Gamma distribution expressing our prior belief about the variability of the prevalence estimates across the units of the area/region under consideration.
+#' General information should be provided about the mean in terms of c("Very low","Low","Average","High","Very high"). The same holds for the variance parameter.
 #'
+#' @usage findbetamupsi_abstract(themean.cat, thevariance.cat,
+#' psi.percentile=0.90, percentile.median, percentile95value,
+#' seed = 280385, nsims = 10000, root.method = "multiroot")
 #'
-#' @usage findbetamupsi(themean, percentile=0.95, lower.v=T, percentile.value,
-#'   psi.percentile=0.90, percentile.median, percentile95value,
-#'   seed = 280385, nsims = 10000, root.method = "multiroot")
-#'
-#' @param themean specify your prior belief about the mean. It takes a value between 0 and 1.
-#' @param percentile specify the level of confidence that the true value of the mean is greater or lower than the percentile.value. It takes a value between 0 and 1 and the default is 0.95.
-#' @param lower.v logical, if TRUE the specified percentile.value is the upper limit for the mean at the specified confidence level (percentile). If FALSE the specified percentile.value is the lower limit for the mean at the specified confidence level (percentile).The default is TRUE.
-#' @param percentile.value specify the upper or lower limit for the mean at the specified level of confidence (percentile). It takes a value between 0 and 1.
+#' @param themean.cat specify your prior belief about the mean. It takes a value among c("Very low","Low","Average","High","Very high").
+#' @param thevariance.cat specify your prior belief about the variance. It takes a value among c("Very low","Low","Average","High","Very high").
 #' @param psi.percentile specify the level of confidence that a certain fraction of the units under study has a prevalence less than the percentile.median. It takes a value between 0 and 1 and the default is 0.90.
 #' @param percentile.median specify the median value that corresponds to the defined psi.percentile. It takes a value between 0 and 1 and has to be higher than both themean and the percentile.
 #' @param percentile95value specify the value that the percentile.median does not exceed with 95% confidence. It takes a value between 0 and 1 and has to be higher than the percentile.median.
@@ -21,25 +19,19 @@
 #' @examples
 #' ## Example
 #' ## The mean prevalence of a disease/infection for the units within an area/region
-#' ## is thought to be 0.20 and we are 99% confident that it is not more than 0.40.
-#' ## Within this area, we are also confident that 90% of all units have a prevalence
-#' ## less or equal to 0.50 and we are 95% certain that it does not exceed 0.60
+#' ## is thought to be generally low and its variance is neither high nor low,
+#' ## we are also confident that 90% of all units have a prevalence
+#' ## less or equal to 0.60 and we are 95% certain that it does not exceed 0.70
 #'
-#' res1 <- findbetamupsi(
-#'   themean = 0.20, percentile = 0.99,
-#'   lower.v = TRUE, percentile.value = 0.30, psi.percentile = 0.90,
-#'   percentile.median = 0.50, percentile95value = 0.60
+#' findbetamupsi_abstract(
+#'   themean.cat = "Low", thevariance.cat = "Average",
+#'   psi.percentile = 0.90, percentile.median = 0.60, percentile95value = 0.70
 #' )
-#'
-#' res2 <- findbetamupsi(
-#'   themean = 0.20, percentile = 0.99,
-#'   lower.v = TRUE, percentile.value = 0.30, psi.percentile = 0.90,
-#'   percentile.median = 0.50, percentile95value = 0.60,
+#' findbetamupsi_abstract(
+#'   themean.cat = "Low", thevariance.cat = "Average",
+#'   psi.percentile = 0.90, percentile.median = 0.60, percentile95value = 0.70,
 #'   root.method = "nleqslv"
 #' )
-#'
-#' res1
-#' res2
 #'
 #' @export
 #' @return param_beta: The beta distribution parameters Beta(a,b)
@@ -51,22 +43,29 @@
 #' @references
 #' Branscum, A. J., Gardner, I. A., & Johnson, W. O. (2005): Estimation of diagnostic test sensitivity and specificity through Bayesian modeling. Preventive veterinary medicine, \bold{68}, 145--163.
 
-findbetamupsi <- function(themean, percentile = 0.95, lower.v = T, percentile.value,
-                          psi.percentile = 0.90, percentile.median, percentile95value,
-                          seed = 280385, nsims = 10000, root.method = "multiroot") {
-  if (lower.v == T) {
-    pr_n <- percentile
-  } else {
-    pr_n <- 1 - percentile
-  }
-  stopifnot((lower.v == T && themean <= percentile.value) |
-    (lower.v == F && themean >= percentile.value))
-  stopifnot(percentile.median > themean && percentile95value >
-    percentile.median)
-  stopifnot((lower.v == T && percentile.value < percentile.median) |
-    (lower.v == F && percentile.value != percentile.median))
+findbetamupsi_abstract <- function(themean.cat = c("Very low", "Low", "Average", "High", "Very high"),
+                                   thevariance.cat = c("Very low", "Low", "Average", "High", "Very high"),
+                                   psi.percentile = 0.90, percentile.median = 0.8, percentile95value = 0.9,
+                                   seed = 280385, nsims = 10000, root.method = "multiroot") {
+  alpha <- 0.99995
+  pr_n <- 0.9999
+  levels <- c("Very low", "Low", "Average", "High", "Very high")
+  themean <- seq(0.15, 0.95, length.out = 5)[which(levels == themean.cat)]
+  thevariance.optim <- seq(0.001, 0.5, by = 0.001)
+
+  thevar_max <- thevariance.optim[length(which(themean + qnorm(alpha) * thevariance.optim < 1 &
+    themean - qnorm(alpha) * thevariance.optim > 0))]
+  thevariance <- seq(0.001, thevar_max, length.out = 5)[which(levels == thevariance.cat)]
+  percentile.value <- themean + qnorm(alpha) * thevariance
+
+
+  stopifnot(themean <= percentile.value)
   stopifnot(psi.percentile > 0.5 && psi.percentile < 1)
+  stopifnot(percentile.median > themean && percentile95value > percentile.median)
+  stopifnot(percentile.value < percentile.median)
+
   a <- runif(1, 1, 10)
+
   to.minimize <- function(a) {
     abs(qbeta(pr_n, shape1 = a, shape2 = a * (1 - themean) / themean) -
       percentile.value)
@@ -105,13 +104,12 @@ findbetamupsi <- function(themean, percentile = 0.95, lower.v = T, percentile.va
     a <- rgamma(nsims, ss2$x[1], ss2$x[2])
   }
 
-
   b <- rbeta(nsims, alpha_mu, beta_mu)
   param <- c(a = alpha_mu, b = beta_mu)
   sample_beta <- rbeta(nsims, a * b, a * (1 - b))
 
   input <- c(
-    themean = themean, percentile = percentile,
+    themean = themean, percentile = pr_n,
     percentile.value = percentile.value, psi.percentile = psi.percentile,
     percentile.median = percentile.median, percentile95value = percentile95value
   )
